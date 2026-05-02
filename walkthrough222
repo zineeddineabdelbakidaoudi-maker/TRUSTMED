@@ -1,0 +1,157 @@
+# TrustMed — Phases 1–3 Walkthrough
+
+## Phase 3 — New Files Added
+
+### FILE 1 — docker-compose.yml (Updated)
+Added MinIO service (S3-compatible object storage):
+- Image: `minio/minio:latest`
+- Ports: 9000 (API), 9001 (Console)
+- Volume: `minio_data:/data`
+- Healthcheck: `/minio/health/live`
+- Added `minio` to app's `depends_on`
+
+### FILE 2 — shared/storage/StorageService.js
+MinIO wrapper with AES-256-CBC encryption at rest.
+
+| Method | Description |
+|---|---|
+| `uploadDocument(practitionerId, docType, buffer, mimeType)` | Validates MIME (jpeg/png/webp/pdf) + size (10MB max), encrypts with AES-256-CBC (IV\|\|ciphertext), uploads to MinIO |
+| `downloadDocument(storage_key)` | Downloads from MinIO, decrypts, returns buffer + mimeType |
+| `deleteDocument(storage_key)` | Soft-delete: copies to `deleted/` prefix before removing original |
+
+### FILE 3 — services/auth/routes/documents.js
+Express router mounted at `/v1/practitioner`.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/documents` | POST | Multipart upload (multer, 10MB), AES encrypt → MinIO, insert DB record, publish PROCESS_DOCUMENTS to RabbitMQ |
+| `/documents` | GET | List practitioner's documents (NEVER returns storage_key) |
+| `/documents/:id/download` | GET | Download decrypted document (scoped to authenticated practitioner) |
+
+### FILE 4 — services/ocr/OcrService.js
+Azure Document Intelligence wrapper with structured field extraction.
+
+| Doc Type | Azure Model | Extracted Fields |
+|---|---|---|
+| CIN | prebuilt-idDocument | full_name, date_of_birth, id_number, expiry_date, nationality |
+| DIPLOMA | prebuilt-document | institution_name, graduate_name, degree_title, graduation_year, field_of_study |
+| CNOM_CARD | prebuilt-idDocument | cnom_number, full_name, specialty, issue_date, expiry_date |
+| AGREMENT | prebuilt-document | agrement_number, establishment_name, wilaya_code, issue_date |
+| SELFIE | — | Returns `liveness_check_required` immediately |
+
+Fallback: Tesseract.js (fra+ara+eng) when Azure is unavailable.
+
+### FILE 5 — services/ocr/FraudDetector.js
+5-check fraud analysis system:
+
+| Check | Severity | Penalty | Trigger |
+|---|---|---|---|
+| NAME_MISMATCH | HIGH | -40 | Levenshtein similarity < 0.75 |
+| DATE_INVALID | MEDIUM | -20 | Year out of range or document expired |
+| CNOM_FORMAT_INVALID | HIGH | -35 | Doesn't match `/^\d{2}-\d{2}-\d{4}$/` or wilaya > 58 |
+| LOW_CONFIDENCE | MEDIUM | -15 | Any key field confidence < 0.60 |
+| CROSS_DOC_MISMATCH | HIGH | -30 | Name/wilaya inconsistency across documents |
+
+**Scoring:** Start 100, subtract penalties. **Recommendations:**
+- `AUTO_APPROVE`: score ≥ 70 AND no HIGH flags
+- `HUMAN_REVIEW`: score 30–69 OR any MEDIUM flag
+- `FREEZE`: score < 30 OR any HIGH flag
+
+**Tested:** Clean doc → 100/AUTO_APPROVE ✅ | Fraud doc → 0/FREEZE with 4 flags ✅
+
+### FILE 6 — services/ocr/DocumentWorker.js
+Real RabbitMQ consumer (replaces stub). Run: `node services/ocr/DocumentWorker.js`
+
+For each PROCESS_DOCUMENTS job:
+1. Download + decrypt from MinIO
+2. OCR analysis (Azure → Tesseract fallback)
+3. Fraud detection (5 checks)
+4. Update documents table (ocr_result, fraud_flags, fraud_score)
+5. Branch: AUTO_APPROVE → DOCUMENT_CLEAN step | HUMAN_REVIEW → FLAGGED + reviewer_queue | FREEZE → SUSPENDED + compliance webhook
+
+### FILE 7 — services/auth/routes/phone.js
+Phone OTP verification:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/phone/request` | POST | Generate 6-digit OTP, bcrypt hash, send via Twilio SMS. 60s cooldown. |
+| `/phone/verify` | POST | Compare OTP (bcrypt), max 3 attempts → LOCKED. On match → PHONE_OTP_VERIFIED engine step. |
+
+**Security:** OTP stored as bcrypt hash only, never plaintext. Max 3 attempts then LOCKED. Algerian format: `+213[5-7]XXXXXXXX`.
+
+### FILE 8 — services/cnom/CnomScraper.js
+Axios + cheerio scraper (no Playwright). Portal URLs configurable via `.env`.
+
+| Method | Description |
+|---|---|
+| `searchByCnomNumber(cnomNumber)` | Routes to correct portal by wilaya, parses HTML for practitioner data |
+| `matchPractitioner(cnomNumber, name, specialty)` | Fuzzy name match (Levenshtein). CONFIRMED ≥0.80, PROVISIONAL ≥0.60, MISMATCH <0.60 |
+| `runBatchVerification()` | Processes PROVISIONAL practitioners with CNOM numbers (max 50, 7-day cooldown) |
+
+### FILE 9 — services/cnom/CnomWorker.js
+Run: `node services/cnom/CnomWorker.js`
+- **Cron:** `0 2 * * *` (2:00 AM Africa/Algiers) → batch verification
+- **Queue:** VERIFY_CNOM consumer for on-demand checks
+
+### Migration 012
+- `documents`: added `size_bytes`, `checksum_sha256`, `fraud_score` columns
+- `practitioners`: added `last_cnom_check` column
+- `reviewer_queue`: new table (id, practitioner_id, document_id, reason, assigned_to, status, resolution)
+
+---
+
+## All Endpoints (Phases 1–3)
+
+| Endpoint | Method | Phase | Auth | Description |
+|---|---|---|---|---|
+| `/health` | GET | 1 | None | Health check |
+| `/oauth/authorize` | GET | 1 | None | Initiate OAuth2 flow |
+| `/oauth/token` | POST | 1 | None | Exchange auth code for JWT (rate limited) |
+| `/v1/practitioner/me` | GET | 1 | Bearer | Get practitioner profile |
+| `/v1/partner/register` | POST | 1 | None | Register partner |
+| `/v1/practitioner/documents` | POST | 3 | Bearer | Upload document (multipart) |
+| `/v1/practitioner/documents` | GET | 3 | Bearer | List documents |
+| `/v1/practitioner/documents/:id/download` | GET | 3 | Bearer | Download document |
+| `/v1/practitioner/phone/request` | POST | 3 | Bearer | Request OTP SMS |
+| `/v1/practitioner/phone/verify` | POST | 3 | Bearer | Verify OTP |
+
+## Workers (Separate Processes)
+
+| Worker | Command | Description |
+|---|---|---|
+| DocumentWorker | `node services/ocr/DocumentWorker.js` | Consumes PROCESS_DOCUMENTS queue |
+| CnomWorker | `node services/cnom/CnomWorker.js` | Nightly cron + VERIFY_CNOM queue |
+
+## Docker Services (5 containers)
+
+| Service | Image | Ports |
+|---|---|---|
+| app | node:20-alpine | 8000 |
+| postgres | postgres:16 | 5432 |
+| redis | redis:7-alpine | 6379 |
+| rabbitmq | rabbitmq:3-management | 5672, 15672 |
+| minio | minio/minio:latest | 9000, 9001 |
+
+---
+
+## Syntax Verification — All Pass ✅
+
+```
+node -c shared/storage/StorageService.js         ✅
+node -c services/ocr/OcrService.js                ✅
+node -c services/ocr/FraudDetector.js             ✅
+node -c services/ocr/DocumentWorker.js            ✅
+node -c services/auth/routes/documents.js         ✅
+node -c services/auth/routes/phone.js             ✅
+node -c services/cnom/CnomScraper.js              ✅
+node -c services/cnom/CnomWorker.js               ✅
+node -c server.js                                 ✅
+```
+
+## Functional Tests ✅
+
+| Test | Result |
+|---|---|
+| FraudDetector: clean doc → score 100, AUTO_APPROVE, 0 flags | ✅ |
+| FraudDetector: fraud doc → score 0, FREEZE, 4 flags (NAME_MISMATCH, DATE_INVALID, CNOM_FORMAT_INVALID, LOW_CONFIDENCE) | ✅ |
+| All Phase 1+2 tests still passing (TrustScore, JWT, HMAC) | ✅ |

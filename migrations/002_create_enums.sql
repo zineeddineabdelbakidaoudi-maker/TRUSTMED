@@ -1,0 +1,10 @@
+-- 002: Create custom ENUM types
+CREATE TYPE verification_status_enum AS ENUM (
+  'IDENTITY_PENDING',
+  'IDENTITY_CONFIRMED',
+  'PROVISIONAL',
+  'CNOM_CONFIRMED',
+  'FULLY_VERIFIED',
+  'FLAGGED',
+  'SUSPENDED'
+);

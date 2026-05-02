@@ -1,0 +1,33 @@
+TrustMed Security Hardening Mega Prompt Implementation
+The security hardening architecture for the TrustMed B2B platform has been fully implemented. This major upgrade fortifies the core engine against Sybil attacks, identity fraud, and compliance violations through eight key upgrades.
+
+Upgrades Implemented
+1. Privacy Consent (Upgrade A)
+Implemented: Added a GDPR-compliant POST /v1/practitioner/consent endpoint to force privacy and terms acceptance.
+Engine Logic: Updated VerificationEngine.js to serve as a gatekeeper, rejecting any verification transitions (processStep) if the practitioner hasn't completed the consent step.
+2. Face Liveness & Face Match (Upgrade B)
+Implemented: Added a new LivenessService.js connecting to Azure Face API to provide server-side checks for blur, exposure, liveness scoring, and selfie-to-document face matching.
+Worker Update: DocumentWorker.js now routes SELFIE uploads to the liveness pipeline. Failures correctly divert to the reviewer_queue.
+Engine Update: Distributed scoring now includes LIVENESS_VERIFIED logic adding 13 trust points and mapping to the confidence score logic.
+3. Passport Scan Support (Upgrade C)
+Implemented: The OcrService.js now uses the Azure prebuilt-idDocument model for PASSPORT documents, securely extracting Machine Readable Zone (MRZ) details (mrz_line1, mrz_line2).
+MRZ Validation: Added a robust ICAO Doc 9303 standard MRZ checksum validation in FraudDetector.js (Check 6) returning HIGH severity risk points (40 penalty) upon failure.
+4. Sybil Attack Defense (Upgrade D)
+Implemented: Adjusted VouchingService.js to employ a PageRank dampening strategy on requestVouch.
+Weighted Confidence: Instead of a flat requirement, effective_vouch_strength leverages a dynamic weight calculation out-degree ($1 / N$ vouches given) reducing the risk of a single bad actor inflating scores artificially.
+Demotions: The system properly demotes FULLY_VERIFIED doctors and notifies partners via webhooks if an active vouch is withdrawn, ensuring real-time truth synchronization.
+5. Trust Graph Engine (Upgrade E)
+Implemented: Created TrustGraphService.js to run in the background (Job 5 cron in MonitoringWorker.js).
+Graph Mathematics: Computes network adjacency arrays to execute Tarjan's strongly connected components algorithm catching high-density rings (>0.80 density).
+Anomalies & Rankings: Approximates betweenness centrality to catch unnatural bridging nodes (scoring +25 risk points), while iterating standard PageRank distributions back to practitioner rows.
+6. Weighted Institutional Anchoring (Upgrade F)
+Implemented: A variable scoring tier matrix added to InstitutionalEmailService.js.
+VerificationEngine Link: Instead of a flat +20 points, the Engine assigns weight based on domain (e.g. 30 pts for teaching hospitals chu-*, 15 pts for univ-*).
+7. Device Fingerprinting (Upgrade G)
+Implemented: Built DeviceFingerprintService.js storing salted IP/Header SHA-256 fingerprint hashes in req.fingerprint_hash.
+Detection & Audit Pipeline: Updated authenticate.js to append hashes continuously and audit.js to write the signals alongside all database queries.
+Fraud Integration: FraudDetector.js (Check 1 extension) pulls the last hash and flags if the fingerprint was used by another actor in the last 30 days (+35 points, HIGH severity).
+8. Non-Linear Trust Scoring (Upgrade H)
+Implemented: Transitioned TrustScoreCalculator.js from basic summation to a confidence multiplier adjustment matrix.
+Dynamic Calculation: computeFinalScore() now applies 30%, 10%, or 3% decrements to the base score depending on pending risk signals, and returns trust_confidence.
+Payload Overrides: Connected base_trust_score and trust_confidence values strictly up to /me internal checks and the OAuth2 RS256 token payloads.
