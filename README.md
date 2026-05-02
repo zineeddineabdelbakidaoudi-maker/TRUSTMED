@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # TrustMed — Medical Practitioner Verification Engine
 
 > "Sign in with Google" — but for verifying that a doctor is real, licensed, and practicing in Algeria.
@@ -267,3 +268,6 @@ TRUSTMEDZ/
 ## License
 
 Proprietary — TrustMed Project, Track B — Digital Health Trust Layer.
+=======
+# TRUSTMED
+>>>>>>> ac7f695ea218833ca96b9d1774b03a0b70b43680

@@ -4,9 +4,9 @@
   "outputDirectory": "client/dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
-  "env": {
-    "VITE_API_URL": "@vite_api_url"
-  }
 }
