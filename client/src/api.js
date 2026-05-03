@@ -14,6 +14,9 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const adminLogin = (email, password) => 
+  api.post('/admin/login', { email, password });
+
 export const verifyCnom = (cnomNumber, fullName) => 
   api.post('/api/cnom/verify', { cnomNumber, fullName });
 

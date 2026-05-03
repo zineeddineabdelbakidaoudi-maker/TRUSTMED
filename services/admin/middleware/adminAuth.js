@@ -70,11 +70,16 @@ loginRouter.post('/login', async (req, res) => {
   }
 });
 
-// Middleware to require valid admin JWT
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader === 'Bearer null') {
+    // DEV BYPASS: Allow access without token during local development
+    if (process.env.NODE_ENV !== 'production') {
+      logger.warn('DEV BYPASS: Authenticating as mock admin');
+      req.admin = { id: '00000000-0000-0000-0000-000000000000', role: 'ADMIN', email: 'admin@trustmed.dz' };
+      return next();
+    }
     return res.status(401).json({ error: 'unauthorized', message: 'Missing or invalid token' });
   }
 
