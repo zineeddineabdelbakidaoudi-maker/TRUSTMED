@@ -6,7 +6,7 @@ const { writeAuditLog } = require('../../../shared/db/audit');
 const logger = require('../../../shared/logger');
 
 const loginRouter = express.Router();
-const JWT_SECRET = process.env.ADMIN_JWT_SECRET;
+const JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = 28800; // 8 hours in seconds
 
 // POST /admin/login
