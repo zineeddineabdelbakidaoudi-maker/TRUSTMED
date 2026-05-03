@@ -354,6 +354,111 @@ Return your response STRICTLY as a JSON object with this exact schema, and absol
       return null;
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FACE DETECTION — Uses Gemini to detect if image has a face
+  // ═══════════════════════════════════════════════════════════
+
+  async detectFace(buffer, mimeType) {
+    const base64Image = buffer.toString('base64');
+
+    const prompt = `Analyze this image. Does it contain exactly ONE clear human face?
+Return ONLY a JSON object with this schema:
+{
+  "has_face": boolean,
+  "face_count": number,
+  "quality": "HIGH" | "MEDIUM" | "LOW",
+  "reason": "Brief explanation"
+}`;
+
+    try {
+      if (this.geminiKey) {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          {
+            contents: [{ parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Image } },
+            ]}],
+            generationConfig: { response_mime_type: 'application/json' },
+          },
+          { timeout: 30000 }
+        );
+
+        const content = response.data.candidates[0].content.parts[0].text;
+        const parsed = JSON.parse(content);
+        return {
+          has_face: parsed.has_face,
+          score: parsed.has_face ? (parsed.quality === 'HIGH' ? 95 : parsed.quality === 'MEDIUM' ? 75 : 50) : 0,
+          details: parsed,
+        };
+      }
+    } catch (e) {
+      logger.error('Face detection failed', { error: e.message });
+    }
+
+    return { has_face: false, score: 0, details: { error: 'No AI model available' } };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FACE COMPARISON — Uses Gemini to compare selfie vs ID photo
+  // ═══════════════════════════════════════════════════════════
+
+  async compareFacesWithAI(selfieBuffer, selfieMime, idBuffer, idMime) {
+    const selfieB64 = selfieBuffer.toString('base64');
+    const idB64 = idBuffer.toString('base64');
+
+    const prompt = `You are a biometric face verification expert. Compare the two images below.
+Image 1 is a SELFIE. Image 2 is a NATIONAL ID CARD or PASSPORT photo.
+
+Determine if they show the SAME person. Account for differences in angle, lighting, age, and image quality.
+
+Return ONLY a JSON object with this schema:
+{
+  "same_person": boolean,
+  "confidence": number (0-100),
+  "selfie_has_face": boolean,
+  "id_has_face": boolean,
+  "reason": "Brief explanation"
+}`;
+
+    try {
+      if (this.geminiKey) {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          {
+            contents: [{ parts: [
+              { text: prompt },
+              { text: 'IMAGE 1 — SELFIE:' },
+              { inline_data: { mime_type: selfieMime, data: selfieB64 } },
+              { text: 'IMAGE 2 — ID CARD / PASSPORT:' },
+              { inline_data: { mime_type: idMime, data: idB64 } },
+            ]}],
+            generationConfig: { response_mime_type: 'application/json' },
+          },
+          { timeout: 45000 }
+        );
+
+        const content = response.data.candidates[0].content.parts[0].text;
+        const parsed = JSON.parse(content);
+
+        logger.info('Face comparison result', { same_person: parsed.same_person, confidence: parsed.confidence });
+
+        return {
+          matched: parsed.same_person,
+          confidence: parsed.confidence,
+          selfie_has_face: parsed.selfie_has_face,
+          id_has_face: parsed.id_has_face,
+          reason: parsed.reason,
+        };
+      }
+    } catch (e) {
+      logger.error('Face comparison failed', { error: e.message });
+    }
+
+    return { matched: false, confidence: 0, reason: 'No AI model available for face comparison' };
+  }
 }
 
 module.exports = VisionVerificationService;
+

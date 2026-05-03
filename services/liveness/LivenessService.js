@@ -1,10 +1,10 @@
 const axios = require('axios');
 const FormData = require('form-data');
-const pool = require('../../../shared/db/pool');
-const { writeAuditLog } = require('../../../shared/db/audit');
-const logger = require('../../../shared/logger');
-const StorageService = require('../../../shared/storage/StorageService');
-const VerificationEngine = require('../../verification/VerificationEngine');
+const pool = require('../../shared/db/pool');
+const { writeAuditLog } = require('../../shared/db/audit');
+const logger = require('../../shared/logger');
+const StorageService = require('../../shared/storage/StorageService');
+const VerificationEngine = require('../verification/VerificationEngine');
 
 const AZURE_FACE_API_KEY = process.env.AZURE_FACE_API_KEY;
 const AZURE_FACE_API_ENDPOINT = process.env.AZURE_FACE_API_ENDPOINT;

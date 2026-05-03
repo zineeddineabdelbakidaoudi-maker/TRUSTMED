@@ -33,6 +33,7 @@ app.set('trust proxy', 1);
 
 // ── Routes ──
 app.use('/oauth', oauthRoutes);
+app.use('/v1/practitioner', require('./services/auth/routes/register'));
 app.use('/v1/practitioner', practitionerRoutes);
 app.use('/v1/practitioner', require('./services/auth/routes/consent'));
 app.use('/v1/practitioner', documentsRoutes);
@@ -47,6 +48,7 @@ app.use('/admin/cases', requireAdmin, adminCasesRoutes);
 app.use('/admin/practitioners', adminPractitionerRoutes);
 app.use('/api/cnom', cnomRoutes);
 app.use('/api/admin/practitioners', adminPractitionerRoutes);
+app.use('/api/vision', require('./services/ocr/routes/vision'));
 app.use('/v1/badge', badgeRoutes);
 app.use('/v1', badgeRoutes); // for /v1/verify/:id
 app.use('/v1/verify', require('./services/auth/middleware/authenticate'), require('./services/auth/routes/recheck'));
