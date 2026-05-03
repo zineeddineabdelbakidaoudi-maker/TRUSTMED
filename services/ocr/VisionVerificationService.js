@@ -299,7 +299,7 @@ You MUST respond with ONLY a valid JSON object matching this exact schema:
       parts.push({ inline_data: { mime_type: mimeType, data: base64Image } });
 
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${this.geminiKey}`,
         {
           contents: [{ parts }],
           generationConfig: { response_mime_type: 'application/json' },
@@ -368,7 +368,7 @@ Return ONLY a JSON object with this schema:
     try {
       if (this.geminiKey) {
         const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${this.geminiKey}`,
           {
             contents: [{ parts: [
               { text: prompt },
@@ -419,7 +419,7 @@ Return ONLY a JSON object with this schema:
     try {
       if (this.geminiKey) {
         const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${this.geminiKey}`,
           {
             contents: [{ parts: [
               { text: prompt },
@@ -472,7 +472,7 @@ Return ONLY a JSON object with this schema:
     try {
       if (this.geminiKey) {
         const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${this.geminiKey}`,
           {
             contents: [{ parts: [
               { text: prompt },
