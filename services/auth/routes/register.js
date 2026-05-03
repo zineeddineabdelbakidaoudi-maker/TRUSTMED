@@ -43,7 +43,15 @@ router.post('/register', async (req, res) => {
     }
 
     // Normalize CNOM: convert 16/8343 → 16-8343
-    const normalizedCnom = cnom_number.trim().replace(/\//g, '-');
+    let normalizedCnom = cnom_number.trim().replace(/\//g, '-');
+    
+    // DB constraint chk_cnom_number_format requires either XX-XX-XXXX or XX-XXXXX (5 digits).
+    // If the user inputs 16/8434 (4 digits), we pad it to 16-08434 to satisfy Postgres.
+    const parts = normalizedCnom.split('-');
+    if (parts.length === 2 && parts[1].length < 5) {
+      parts[1] = parts[1].padStart(5, '0');
+      normalizedCnom = parts.join('-');
+    }
 
     // Check if CNOM already exists
     const existing = await pool.query(
