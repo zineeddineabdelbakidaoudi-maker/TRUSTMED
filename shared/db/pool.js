@@ -1,12 +1,21 @@
 const { Pool } = require('pg');
 const logger = require('../logger');
 
+const config = process.env.DATABASE_URL 
+  ? { 
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    }
+  : {
+      host: process.env.PGHOST || 'localhost',
+      port: parseInt(process.env.PGPORT, 10) || 5432,
+      user: process.env.PGUSER || 'trustmed',
+      password: process.env.PGPASSWORD || 'change_me_in_production',
+      database: process.env.PGDATABASE || 'trustmed',
+    };
+
 const pool = new Pool({
-  host: process.env.PGHOST || 'localhost',
-  port: parseInt(process.env.PGPORT, 10) || 5432,
-  user: process.env.PGUSER || 'trustmed',
-  password: process.env.PGPASSWORD || 'change_me_in_production',
-  database: process.env.PGDATABASE || 'trustmed',
+  ...config,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
