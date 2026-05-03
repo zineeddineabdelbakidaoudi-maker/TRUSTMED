@@ -539,21 +539,41 @@ class CnomScraper {
       }
 
       const $ = cheerio.load(response.data);
-      const text = $('body').text().replace(/\s+/g, ' ').toUpperCase();
       
-      const searchNames = fullName.toUpperCase().split(' ');
-      let nameMatch = searchNames.some(namePart => text.includes(namePart) && namePart.length > 3);
+      // Fix "Search Echo" Vulnerability
+      // We must only search inside actual result containers, NOT the whole body,
+      // because search engines echo the query back (e.g. "0 results for fake_name").
+      let foundName = null;
+      let foundSpecialty = null;
+
+      // Common selectors for doctor cards across different Algerian directories
+      const resultCards = $('.doctor-card, .listing-item, .result-item, article, .card-body, .dr-name');
       
-      if (!nameMatch && text.includes(fullName.toUpperCase())) {
-        nameMatch = true;
+      if (resultCards.length === 0) {
+        // If there are absolutely no result cards, immediately fail
+        return { found: false, error: 'No search results found' };
       }
 
-      if (nameMatch) {
-        // Attempt to extract name and specialty around the matched node or just return provisional true
+      const searchNames = fullName.toUpperCase().split(' ');
+
+      resultCards.each((_, el) => {
+        // Look at headers or specific title tags to avoid matching the "You searched for X" text
+        const cardText = $(el).find('h2, h3, h4, .title, .name, strong').text().toUpperCase();
+        
+        let nameMatch = searchNames.some(namePart => cardText.includes(namePart) && namePart.length > 3);
+        
+        if (nameMatch || cardText.includes(fullName.toUpperCase())) {
+          foundName = cardText.trim().replace(/\s+/g, ' ');
+          foundSpecialty = $(el).find('.specialty, .specialite, .category').first().text().trim() || null;
+          return false; // Break out of loop
+        }
+      });
+
+      if (foundName) {
         return {
           found: true,
-          scraped_name: fullName, // fuzzy matched
-          scraped_specialty: null, // hard to extract generically
+          scraped_name: foundName, // Use the ACTUAL name from the card, not the input!
+          scraped_specialty: foundSpecialty,
           scraped_status: 'ACTIVE', // assumed active if listed
           portal_url: searchUrl,
           scraped_at: new Date().toISOString(),
@@ -561,7 +581,7 @@ class CnomScraper {
         };
       }
 
-      return { found: false, error: 'Name not found in page text' };
+      return { found: false, error: 'Name not found in valid result blocks' };
     } catch (err) {
       logger.warn(`Third party search failed for ${source.name}`, { error: err.message });
       return { found: false, error: err.message };
