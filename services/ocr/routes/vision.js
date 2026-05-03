@@ -34,8 +34,20 @@ router.post('/analyze', upload.single('file'), async (req, res) => {
 
     const vision = new VisionVerificationService();
 
-    if (docType === 'DIPLOMA' || docType === 'CNOM_CARD') {
+    if (docType === 'DIPLOMA') {
       const result = await vision.evaluateDiploma(buffer, mimetype);
+      
+      return res.json({
+        doc_type: docType,
+        is_authentic: result.is_authentic,
+        score: result.score,
+        consensus: result.consensus_reason,
+        details: result.details,
+      });
+    }
+
+    if (docType === 'CNOM_CARD') {
+      const result = await vision.evaluateCnomCard(buffer, mimetype);
       
       return res.json({
         doc_type: docType,

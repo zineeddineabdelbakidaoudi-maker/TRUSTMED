@@ -120,30 +120,23 @@ class VisionVerificationService {
   _getSystemPrompt() {
     return `You are an expert forensic document examiner specializing EXCLUSIVELY in Algerian Medical Diplomas (Docteur en Médecine).
 
-IMPORTANT RULES:
-1. You ONLY accept and verify MEDICAL diplomas (Docteur en Médecine, Docteur en Pharmacie, Docteur en Chirurgie Dentaire).
-2. If the document is NOT a medical diploma (e.g. Engineering, Computer Science, Law, Bachelor's Degree, Master's in non-medical field), you MUST immediately reject it with is_authentic=false and reason="NOT_MEDICAL_DIPLOMA".
-3. If the document IS a medical diploma, analyze it for authenticity using the criteria below.
+CRITICAL DIRECTIVE:
+1. You MUST first determine if the uploaded image is actually a medical diploma.
+2. If it is a generic Bachelor's Degree (Licence), Master's Degree, Engineering Degree, High School Diploma (Baccalauréat), ID card, CNOM card, or ANY non-medical document, you MUST immediately reject it.
+3. If it is NOT a medical diploma, output exactly this JSON: {"is_authentic": false, "confidence_score": 0, "is_medical_diploma": false, "reason": "Document is not a medical diploma."}
+4. Only if it IS a medical diploma, analyze its authenticity based on seals, signatures, and layout.
 
-AUTHENTICITY CRITERIA FOR ALGERIAN MEDICAL DIPLOMAS:
-- REAL diplomas are issued by Algerian Faculties of Medicine (Faculté de Médecine) and bear the seal of the Ministry of Higher Education.
-- REAL diplomas are typically in Arabic and/or French, printed on official watermarked paper, with wet ink signatures and embossed/stamped university seals.
-- REAL diplomas have natural scan artifacts: slight rotation, uneven lighting, paper texture visible.
+AUTHENTICITY CRITERIA:
+- REAL diplomas are issued by Algerian Faculties of Medicine (Faculté de Médecine).
+- REAL diplomas have official seals, wet ink signatures, and natural scan artifacts.
+- FAKE diplomas look like digital templates, have perfectly aligned text, generic serial numbers, or digital/flat signatures.
 
-FRAUD PATTERNS TO DETECT:
-1. TEMPLATE FORGERY: The document looks like a digital template with perfectly aligned text, no scan distortion, and clean white background. Common among translated diploma forgeries from translation agencies.
-2. GENERIC SERIAL NUMBERS: Placeholder serial numbers like "1234567", "0000000", or "No.1157596" reused across multiple documents.
-3. DIGITAL SIGNATURES: Signatures that appear flat, pixelated, or identical to known digital stamp PNGs without natural ink bleed.
-4. WRONG FIELD OF STUDY: The diploma says "Engineering", "Computer Science", "Informatics", "Law", "Commerce", or any non-medical field — this is NOT a valid medical diploma.
-5. INCONSISTENT SEALS: University seals that look like pasted PNG layers with white artifact edges instead of naturally overlapping the paper.
-6. TRANSLATION TEMPLATES: Documents from unofficial translators (e.g., "Asma ZEGADI", "Fatma CHOUKI") that use the same exact layout for every diploma — these are commonly used to forge credentials.
-
-Return your response STRICTLY as a JSON object with this exact schema, and absolutely nothing else:
+You MUST respond with ONLY a valid JSON object matching this exact schema:
 {
   "is_authentic": boolean,
-  "confidence_score": number (0 to 100),
+  "confidence_score": number,
   "is_medical_diploma": boolean,
-  "reason": "Brief explanation"
+  "reason": "string"
 }`;
   }
 
@@ -457,6 +450,54 @@ Return ONLY a JSON object with this schema:
     }
 
     return { matched: false, confidence: 0, reason: 'No AI model available for face comparison' };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  CNOM CARD VERIFICATION — Uses Gemini to verify CNOM card
+  // ═══════════════════════════════════════════════════════════
+
+  async evaluateCnomCard(buffer, mimeType) {
+    const base64Image = buffer.toString('base64');
+
+    const prompt = `Analyze this image. Is it an official Algerian CNOM (Conseil National de l'Ordre des Médecins) registration card or certificate?
+
+Return ONLY a JSON object with this schema:
+{
+  "is_authentic": boolean,
+  "score": number (0-100),
+  "reason": "Brief explanation"
+}`;
+
+    try {
+      if (this.geminiKey) {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${this.geminiKey}`,
+          {
+            contents: [{ parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Image } },
+            ]}],
+            generationConfig: { response_mime_type: 'application/json' },
+          },
+          { timeout: 30000 }
+        );
+
+        const content = response.data.candidates[0].content.parts[0].text;
+        const parsed = JSON.parse(content);
+        return {
+          is_authentic: parsed.is_authentic,
+          score: parsed.score || (parsed.is_authentic ? 90 : 20),
+          consensus_reason: parsed.reason,
+          details: { Gemini: parsed },
+        };
+      }
+    } catch (e) {
+      logger.error('CNOM card evaluation failed', { error: e.message });
+    }
+
+    // If API fails, just assume it's true to not block the user, or throw error.
+    // We'll return an error to let the user know.
+    throw new Error('All Vision AI models failed to respond.');
   }
 }
 
