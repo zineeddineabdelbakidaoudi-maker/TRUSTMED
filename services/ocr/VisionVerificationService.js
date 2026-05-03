@@ -460,9 +460,20 @@ Return ONLY a JSON object with this schema:
   async evaluateCnomCard(buffer, mimeType) {
     const base64Image = buffer.toString('base64');
 
-    const prompt = `Analyze this image. Is it an official Algerian CNOM (Conseil National de l'Ordre des Médecins) registration card or certificate?
+    const prompt = `You are an expert forensic document examiner specializing EXCLUSIVELY in Algerian CNOM (Conseil National de l'Ordre des Médecins) Registration Cards/Certificates.
 
-Return ONLY a JSON object with this schema:
+CRITICAL DIRECTIVE:
+1. You MUST first determine if the uploaded image is actually an official CNOM registration document.
+2. If it is a Medical Diploma, ID card, random paper, or ANY other non-CNOM document, you MUST immediately reject it.
+3. If it is NOT a CNOM document, output exactly this JSON: {"is_authentic": false, "score": 0, "reason": "Document is not a CNOM Registration Card."}
+
+AUTHENTICITY CRITERIA FOR CNOM CARDS:
+- REAL CNOM documents clearly contain the Ordre Number (Numéro d'Ordre).
+- REAL CNOM documents mention the Ministry of Health (Ministère de la Santé) or Conseil de l'Ordre des Médecins.
+- REAL CNOM documents contain the practitioner's data (name, specialty).
+- If the document lacks an Ordre Number or is clearly a different type of certificate, it is FAKE or INVALID.
+
+Return ONLY a JSON object with this exact schema:
 {
   "is_authentic": boolean,
   "score": number (0-100),
