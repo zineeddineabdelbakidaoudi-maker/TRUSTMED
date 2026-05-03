@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import AdminVerification from './pages/AdminVerification';
+import LandingPage from './pages/LandingPage';
+import VerificationPortal from './pages/VerificationPortal';
+import CaseReview from './pages/CaseReview';
 import { adminLogin } from './api';
 
 const ProtectedRoute = ({ children }) => {
@@ -77,8 +80,12 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/verify" element={<VerificationPortal />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        
+        {/* Admin Routes */}
         <Route 
           path="/admin/verification" 
           element={
@@ -87,7 +94,14 @@ function App() {
             </ProtectedRoute>
           } 
         />
-        <Route path="/" element={<Navigate to="/admin/verification" />} />
+        <Route 
+          path="/admin/case/:id" 
+          element={
+            <ProtectedRoute>
+              <CaseReview />
+            </ProtectedRoute>
+          } 
+        />
       </Routes>
     </Router>
   );
