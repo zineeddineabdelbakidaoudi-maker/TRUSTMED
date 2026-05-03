@@ -26,7 +26,7 @@ router.post('/consent', authenticate, async (req, res) => {
       await client.query('BEGIN');
 
       const practResult = await client.query(
-        'SELECT privacy_consented, privacy_consented_at FROM practitioners WHERE id = $1 FOR UPDATE',
+        'SELECT privacy_consented, privacy_consented_at, cin_number FROM practitioners WHERE id = $1 FOR UPDATE',
         [practitionerId]
       );
 
@@ -34,11 +34,13 @@ router.post('/consent', authenticate, async (req, res) => {
         throw new Error('Practitioner not found');
       }
 
-      if (practResult.rows[0].privacy_consented) {
+      const practitioner = practResult.rows[0];
+
+      if (practitioner.privacy_consented) {
         await client.query('ROLLBACK');
         return res.json({
           already_consented: true,
-          consented_at: practResult.rows[0].privacy_consented_at,
+          consented_at: practitioner.privacy_consented_at,
         });
       }
 
@@ -74,9 +76,9 @@ router.post('/consent', authenticate, async (req, res) => {
       const signature = hmac.sign(declarationPayload, process.env.HMAC_SECRET);
 
       await client.query(
-        `INSERT INTO legal_declarations (practitioner_id, declaration_text, hmac_signature)
-         VALUES ($1, $2, $3)`,
-        [practitionerId, declarationPayload, signature]
+        `INSERT INTO legal_declarations (practitioner_id, declaration_text, hmac_signature, cin_number)
+         VALUES ($1, $2, $3, $4)`,
+        [practitionerId, declarationPayload, signature, practitioner.cin_number || 'PENDING']
       );
 
       await client.query('COMMIT');
@@ -98,8 +100,8 @@ router.post('/consent', authenticate, async (req, res) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'validation_error', issues: err.errors });
     }
-    logger.error('Error recording consent', { error: err.message });
-    return res.status(500).json({ error: 'server_error', message: 'Internal server error' });
+    logger.error('Error recording consent', { error: err.message, stack: err.stack });
+    return res.status(500).json({ error: 'server_error', message: err.message });
   }
 });
 
