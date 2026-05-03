@@ -5,7 +5,7 @@ services:
     region: frankfurt
     plan: free
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: node create-admin.js && node server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
