@@ -77,7 +77,8 @@ class VisionVerificationService {
     const totalVotes = authenticCount + fakeCount;
 
     if (totalVotes === 0) {
-      throw new Error('All Vision AI models failed to respond.');
+      const errorDetails = Object.keys(modelDetails).map(k => `${k}: ${modelDetails[k].error}`).join(' | ');
+      throw new Error(`All Vision AI models failed. Details: ${errorDetails}`);
     }
 
     // Consensus scoring
@@ -491,13 +492,11 @@ Return ONLY a JSON object with this schema:
           details: { Gemini: parsed },
         };
       }
+      throw new Error('Gemini API Key is missing in environment variables');
     } catch (e) {
-      logger.error('CNOM card evaluation failed', { error: e.message });
+      logger.error('CNOM card evaluation failed', { error: e.message, response: e.response?.data });
+      throw new Error(`Vision AI failed to respond: ${e.response?.data?.error?.message || e.message}`);
     }
-
-    // If API fails, just assume it's true to not block the user, or throw error.
-    // We'll return an error to let the user know.
-    throw new Error('All Vision AI models failed to respond.');
   }
 }
 
